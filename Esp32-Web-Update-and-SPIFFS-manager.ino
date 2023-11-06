@@ -39,6 +39,7 @@
 #define VERSION "1.0"
 
 // This is used by my runEvery Function.
+// And I immediately realise the problem with this.
 unsigned long previousMillis = 0;
 
 void setup()

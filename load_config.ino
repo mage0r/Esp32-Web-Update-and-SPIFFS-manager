@@ -26,7 +26,7 @@ void load_config(fs::FS &fs, const char * path) {
   if(!file || file.isDirectory()){
       Serial.println(F("- failed to open file for reading"));
       Serial.println(F("Creating Default Configuration."));
-      save_config(SPIFFS, "/config.ini");
+      save_config(SPIFFS, path);
       return;
   } else {
     Serial.println(F(" - Success!"));

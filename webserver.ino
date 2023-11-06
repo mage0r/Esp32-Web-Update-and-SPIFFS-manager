@@ -153,6 +153,12 @@ void setupAsyncServer() {
     ESP.restart();
   });
 
+  // just an exception for our ini file so we don't accidentally share our config with the world
+  server.on("/config.ini", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(403);
+  });
+
+  // Default share out any file we have in SPIFFS.
   server.serveStatic("/", SPIFFS, "/").setDefaultFile("index.html").setTemplateProcessor(processor);
 
   server.onNotFound(notFound);
