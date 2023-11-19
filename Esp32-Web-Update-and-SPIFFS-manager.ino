@@ -39,8 +39,9 @@
 #define VERSION "1.0"
 
 // This is used by my runEvery Function.
-// And I immediately realise the problem with this.
-unsigned long previousMillis = 0;
+// The name is arbitrary and you should create
+// a new variable for each timed instance.
+unsigned long run1000 = 0;
 
 void setup()
 {
@@ -66,7 +67,7 @@ void loop()
     ESP.restart();
   }
 
-  if (runEvery(1000)) {
+  if (runEvery(1000, &run1000)) {
     // for the first 30 seconds, check if can get on wifi
     if (!wifi_enabled) {
       if (millis() - wifi_counter <= 30000) {
@@ -86,12 +87,11 @@ void loop()
 
 } // loop end
 
-boolean runEvery(unsigned long interval)
+boolean runEvery(unsigned long interval, unsigned long *previousMillis)
 {
   unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= interval)
-  {
-    previousMillis = currentMillis;
+  if (currentMillis - *previousMillis >= interval) {
+    *previousMillis = currentMillis;
     return true;
   }
   return false;
