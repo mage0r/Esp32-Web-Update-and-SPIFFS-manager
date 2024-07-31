@@ -67,7 +67,7 @@ const char manager_html[] PROGMEM = R"rawliteral(
         padding: 8px;
       }
       #first_td_th {
-        width:350px;
+        width:280px;
       }
       #center_td {
         text-align: center;
@@ -144,6 +144,10 @@ const char manager_html[] PROGMEM = R"rawliteral(
 
       <div id="spacer_20"></div>
 
+      <a href="https://github.com/mage0r/Esp32-Web-Update-and-SPIFFS-manager">https://github.com/mage0r/Esp32-Web-Update-and-SPIFFS-manager</a>
+
+      <div id="spacer_20"></div>
+
       <fieldset>
         <legend>System</legend>
           <div id="spacer_20"></div>
@@ -178,6 +182,7 @@ const char manager_html[] PROGMEM = R"rawliteral(
           <table>
             <tr>
               <th id='first_td_th'></th>
+              <th></th>
               <th></th>
               <th></th>
               <th id='center_td'><input type='button' onclick='window.location.href="/edit?edit_path=new";' value='New File' /></th>
@@ -237,7 +242,7 @@ const char manager_html[] PROGMEM = R"rawliteral(
       <iframe style="display:none" name="self_page"></iframe>
     </center>
   </body>
-</html> )rawliteral";
+</html>)rawliteral";
 
 const char failed_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE HTML>
@@ -389,3 +394,71 @@ const char ok_html[] PROGMEM = R"rawliteral(
     </center>
   </body>
 </html> )rawliteral";
+
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML>
+<html>
+  <head>
+    <title>ESP32 SPIFFS Manager</title>
+    <style>
+      body {
+        background-color: #f7f7f7;
+      }
+      table {
+        background-color: #dddddd;
+        border-collapse: collapse;
+        width:650px;
+      }
+      td, th {
+        border: 1px solid #dddddd;
+        text-align: left;
+        padding: 8px;
+      }
+      #first_td_th {
+        width:280px;
+      }
+      #center_td {
+        text-align: center;
+      }
+      tr:nth-child(even) {
+        background-color: #ffffff;
+      }
+      fieldset {
+        width:700px;
+        background-color: #f7f7f7;
+      }
+    </style>
+  </head>
+  <body>
+  <h2>ESP32 Default Index Page!</h2>
+  Replace me with whatever makes sense for your project!<br />
+  This file is auto-generated if your SPIFFS has no config file.<br />
+  <a href="https://github.com/mage0r/Esp32-Web-Update-and-SPIFFS-manager">https://github.com/mage0r/Esp32-Web-Update-and-SPIFFS-manager</a><br />
+  <fieldset>
+        <legend>System</legend>
+          <div id="spacer_20"></div>
+          <table>
+            <tr>
+              <th>SPIFFS Use</th>
+              <th>ESP32 Status</th>
+            </tr>
+            <tr>
+              <td>
+                Total: %SPIFFS_TOTAL_BYTES%<br />
+                Used: %SPIFFS_USED_BYTES%<br />
+                Free: %SPIFFS_FREE_BYTES%
+              </td>
+              <td>
+                Project: %PROJECT% - %VERSION%<br />
+                Build Date: %BUILDDATE% %BUILDTIME%<br />
+                Free RAM: %GETFREEHEAP% / %GETTOTALHEAP%<br />
+                Free PSRAM: %GETFREEPSRAM% / %GETTOTALPSRAM%<br />
+              </td>
+            </tr>
+          </table>
+          
+        <div id="spacer_20"></div>
+      </fieldset>
+  </body>
+</html>    
+ )rawliteral"; 

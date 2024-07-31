@@ -1,6 +1,7 @@
 void setup_config() {
   // load the config from the config.ini file on the SPIFFS file system.
   // if the file doesn't exist, load defaults.
+  // There's no reason not to add your own options.
 
   Serial.println(F("Loading Defaults"));
 
@@ -27,6 +28,7 @@ void load_config(fs::FS &fs, const char * path) {
       Serial.println(F("- failed to open file for reading"));
       Serial.println(F("Creating Default Configuration."));
       save_config(SPIFFS, path);
+      save_html(SPIFFS, "/index.html", index_html);
       return;
   } else {
     Serial.println(F(" - Success!"));
@@ -40,8 +42,6 @@ void load_config(fs::FS &fs, const char * path) {
   while(file.available()){
 
       byte temp = file.read();
-
-      //Serial.print((char)temp);
 
       if(temp == '=') {
         counter1++;
@@ -61,8 +61,6 @@ void load_config(fs::FS &fs, const char * path) {
         // append to the variable.
         temp_value += char(temp);
       }
-
-      //display_print(F("."));
   }
 
   // if there isn't a \n at the end of the file
@@ -121,4 +119,19 @@ void save_config(fs::FS &fs, const char * path) {
   file.print(temp_message);
   file.close();
 
+}
+
+void save_html(fs::FS &fs, const char *path, const char *html) {
+  // If index.html doesn't exist, create it
+  File file = fs.open(path);
+  if(!file  || file.isDirectory()) {
+    file.close();
+    Serial.print("Default ");
+    Serial.print(path);
+    Serial.println(" does not exist, creating.");
+    File file = fs.open(path, FILE_WRITE);
+    file.print(html);
+  }
+
+  file.close();
 }

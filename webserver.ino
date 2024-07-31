@@ -1,7 +1,5 @@
 String processor(const String& var)
 {
-  if(var == "ALLOWED_EXTENSIONS_EDIT")
-    return allowedExtensionsForEdit;
   if(var == "SPIFFS_FREE_BYTES")
     return convertFileSize((SPIFFS.totalBytes() - SPIFFS.usedBytes()));
   if(var == "SPIFFS_USED_BYTES")
@@ -10,8 +8,7 @@ String processor(const String& var)
     return convertFileSize(SPIFFS.totalBytes());
   if(var == "LISTEN_FILES")
     return listDir(SPIFFS, "/", 0);
-  if(var == "TEXTAREA_CONTENT")
-    return textareaContent;
+
   if(var == "BUILDDATE")
     return __DATE__;
   if(var == "BUILDTIME")
@@ -28,7 +25,18 @@ String processor(const String& var)
     return PROJECT;
   if(var == "VERSION")
     return VERSION;
-  
+
+  return String();
+}
+
+String edit_processor(const String& var) {
+  // We need a separate processor for when we are editing a file
+  // otherwise the template system wipes out the template declarations
+  if(var == "TEXTAREA_CONTENT")
+    return textareaContent;
+  if(var == "ALLOWED_EXTENSIONS_EDIT")
+    return allowedExtensionsForEdit;
+
   if(var == "SAVE_PATH_INPUT") {
     if(savePath == "new.txt") {
       savePathInput = "<input type=\"text\" id=\"save_path\" name=\"save_path\" value=\"" + savePath + "\" >";
@@ -38,7 +46,10 @@ String processor(const String& var)
     return savePathInput;
   }
 
-  return String();
+  // so, if we try to use '%' signs, the processor goes in to a feedback loop.
+  // fortunately, using the http codes get translated by the edit screen and
+  // converted back to the sign.
+  return "&#37" + var + "&#37";
 }
 
 void setupAsyncServer() {
@@ -102,7 +113,7 @@ void setupAsyncServer() {
       savePath = inputMessage;
       textareaContent = readFile(SPIFFS, inputMessage.c_str());
     }
-    request->send_P(200, "text/html", edit_html, processor);
+    request->send_P(200, "text/html", edit_html, edit_processor);
   });
 
 
@@ -141,6 +152,7 @@ void setupAsyncServer() {
     }
     String inputMessage = "/" + request->getParam("download_path")->value();
 
+    
     request->send(SPIFFS, inputMessage, "application/octet-stream", true);
 
     request->redirect("/manager");
@@ -188,7 +200,7 @@ String listDir(fs::FS &fs, const char * dirname, uint8_t levels) {
   while(file) {
     
       listenFiles += "\n            <tr>\n              <td id=\"first_td_th\">";
-      listenFiles += "<a href='/download?download_path=";
+      listenFiles += "<a href='/";
       listenFiles += file.name();
       listenFiles += "'>";
       listenFiles += file.name();
@@ -196,6 +208,10 @@ String listDir(fs::FS &fs, const char * dirname, uint8_t levels) {
 
       listenFiles += "</td>\n              <td>Size: ";
       listenFiles += convertFileSize(file.size());
+      listenFiles += "</td>\n              <td id='center_td'>";
+      listenFiles += "<input type='button' onclick='window.location.href=\"/download?download_path=";
+      listenFiles += file.name();
+      listenFiles += "\";' value='Download' download />";
       listenFiles += "</td>\n              <td id='center_td'>";
       listenFiles += "<input type='button' onclick='window.location.href=\"/edit?edit_path=";
       listenFiles += file.name();
