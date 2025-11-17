@@ -11,6 +11,7 @@
 #include <WiFiAP.h>
 #include <ArduinoOTA.h>
 #include <SPIFFSEditor.h>
+#include "base64.hpp"
 
 #define FORMAT_SPIFFS_IF_FAILED true
 
@@ -29,6 +30,11 @@ String savePathInput = "";
 AsyncWebServer server(80);
 
 bool rebooting = false;
+bool save = false;
+
+// Simple XOR key – change this to whatever you like
+static const uint8_t XOR_KEY = 0x5A;   // arbitrary; same for enc/dec
+static const char ENC_PREFIX = '!';    // leading char to mark encrypted
 
 // Wifi enabled.
 bool wifi_enabled = false;
@@ -36,429 +42,120 @@ unsigned long wifi_counter = 0; // keep trying the wifi for 2 minutes
 
 // These are the pages we need created.  They are stored in program memory as they are static.
 
+// Optimized HTML templates with better compression
 const char manager_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML>
-<html>
-  <head>
-    <title>ESP32 SPIFFS Manager</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-      body {
-        background-color: #f7f7f7;
-      }
-      #submit {
-        width:120px;
-      }
-      #spacer_50 {
-        height: 50px;
-      }
-      #spacer_20 {
-        height: 20px;
-      }
-      table {
-        background-color: #dddddd;
-        border-collapse: collapse;
-        width:650px;
-      }
-      td, th {
-        border: 1px solid #dddddd;
-        text-align: left;
-        padding: 8px;
-      }
-      #first_td_th {
-        width:280px;
-      }
-      #center_td {
-        text-align: center;
-      }
-      tr:nth-child(even) {
-        background-color: #ffffff;
-      }
-      fieldset {
-        width:700px;
-        background-color: #f7f7f7;
-      }
-      #format_notice {
-        color: #ff0000;
-      }
-    </style>
-    <script>
-      function validateFormUpdate() {
-        var inputElement = document.getElementById('update');
-        var files = inputElement.files;
-        if(files.length==0) {
-          alert("You have not chosen a file!");
-          return false;
-        }
-        var value = inputElement.value;
-        var dotIndex = value.lastIndexOf(".")+1;
-        var valueExtension = value.substring(dotIndex);
-        if(valueExtension != "bin") {
-          alert("Incorrect file type!");
-          return false;
-        }
-      }
-      function validateFormUpload() {
-        var inputElement = document.getElementById('upload_data');
-        var files = inputElement.files;
-        if(files.length==0) {
-          alert("You have not chosen a file!");
-          return false;
-        }
-      }
-      function validateFormEdit()
-      {
-        var allowedExtensions = "%ALLOWED_EXTENSIONS_EDIT%";
-        var editSelectValue = document.getElementById('edit_path').value;
-        var dotIndex = editSelectValue.lastIndexOf(".")+1;
-        var editSelectValueExtension = editSelectValue.substring(dotIndex);
-        var extIndex = allowedExtensions.indexOf(editSelectValueExtension);
-        
-        if(editSelectValue == "new") {
-          return true;
-        }
-        if(editSelectValue == "choose") {
-          alert("You have not chosen a file!");
-          return false;
-        }
-        if(extIndex == -1) {
-          alert("Editing of this file type is not supported!");
-          return false;
-        }
-      }
-      function confirmFormat() {
-        var text = "Pressing the \"OK\" button immediately deletes all data from SPIFFS and restarts ESP32!";
-        if (confirm(text) == true) {
-          return true;
-        } else {
-          return false;
-        }
-      }
-    </script>
-  </head>
-  <body>
-    <center>
-           
-      <h2>ESP32 Manager</h2>
-
-      <div id="spacer_20"></div>
-
-      <a href="https://github.com/mage0r/Esp32-Web-Update-and-SPIFFS-manager">https://github.com/mage0r/Esp32-Web-Update-and-SPIFFS-manager</a>
-
-      <div id="spacer_20"></div>
-
-      <fieldset>
-        <legend>System</legend>
-          <div id="spacer_20"></div>
-          <table>
-            <tr>
-              <th>SPIFFS Use</th>
-              <th>ESP32 Status</th>
-            </tr>
-            <tr>
-              <td>
-                Total: %SPIFFS_TOTAL_BYTES%<br />
-                Used: %SPIFFS_USED_BYTES%<br />
-                Free: %SPIFFS_FREE_BYTES%
-              </td>
-              <td>
-                Project: %PROJECT% - %VERSION%<br />
-                Build Date: %BUILDDATE% %BUILDTIME%<br />
-                Free RAM: %GETFREEHEAP% / %GETTOTALHEAP%<br />
-                Free PSRAM: %GETFREEPSRAM% / %GETTOTALPSRAM%<br />
-              </td>
-            </tr>
-          </table>
-          
-        <div id="spacer_20"></div>
-      </fieldset>
-
-      <div id="spacer_20"></div>
-
-      <fieldset>
-        <legend>File list</legend>
-          <div id="spacer_20"></div>
-          <table>
-            <tr>
-              <th id='first_td_th'></th>
-              <th></th>
-              <th></th>
-              <th></th>
-              <th id='center_td'><input type='button' onclick='window.location.href="/edit?edit_path=new";' value='New File' /></th>
-            </tr>
-            %LISTEN_FILES%
-          </table>
-          <div id="spacer_20"></div>
-      </fieldset>
-
-      <div id="spacer_20"></div>
-
-      <fieldset>
-        <legend>File upload</legend>
-          <div id="spacer_20"></div>
-          <form method="POST" action="/upload" enctype="multipart/form-data">
-            <table><tr><td>
-              <input type="file" id="upload_data" name="upload_data">
-              </td><td style="width: 50px">
-              <input type="submit" id="submit" value="File upload!" onclick="return validateFormUpload()">
-            </td></tr></table>
-          </form>
-          <div id="spacer_20"></div>
-      </fieldset>
-      
-      <div id="spacer_20"></div>
-
-      <fieldset>
-        <legend>Format SPIFFS</legend>
-          <div id="spacer_20"></div>
-          <form method="POST" action="/format" target="self_page">
-            <table><tr><td>
-              <div id="format_notice">Pressing the 'Format' button will immediately delete all data from SPIFFS!</div>
-            </td><td style="width: 50px">
-              <input type="submit" id="submit" value="Format" onclick="return confirmFormat()">
-            </td></tr></table>
-          </form>
-          <div id="spacer_20"></div>
-      </fieldset>
-
-      <div id="spacer_20"></div>
-      
-      <fieldset>
-        <legend>Firmware Update</legend>
-          <div id="spacer_20"></div>
-          <form method="POST" action="/update" enctype="multipart/form-data">
-            <table><tr><td>
-            <input type="file" id="update" name="update">
-            </td><td style="width: 50px">
-            <input type="submit" id="submit" value="Update!" onclick="return validateFormUpdate()">
-            </td></tr></table>
-          </form>
-          <div id="spacer_20"></div>
-      </fieldset>
-
-      <div id="spacer_20"></div>
-
-      <iframe style="display:none" name="self_page"></iframe>
-    </center>
-  </body>
-</html>)rawliteral";
-
-const char failed_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML>
-<html>
-  <head>
-    <title>Update unsuccessful</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-      body {
-        background-color: #f7f7f7;
-      }
-      #spacer_50 {
-        height: 50px;
-      }
-    </style>
-  </head>
-  <body>
-    <center>
-      <h2>The update has failed.</h2>
-      <div id="spacer_50"></div>
-      <button onclick="window.location.href='/manager';">to homepage</button>
-    </center>
-  </body>
-</html> )rawliteral";
+<!DOCTYPE HTML><html><head><title>ESP32 SPIFFS Manager</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{background:#f7f7f7;font-family:Arial,sans-serif}
+table{background:#ddd;border-collapse:collapse;width:650px;margin:10px 0}
+td,th{border:1px solid #ddd;text-align:left;padding:8px}
+tr:nth-child(even){background:#fff}
+fieldset{width:700px;background:#f7f7f7;margin:10px 0}
+.btn{width:120px;padding:5px;margin:2px}
+.center{text-align:center}
+.warn{color:#f00}
+</style>
+<script>
+function validateUpdate(){
+var f=document.getElementById('update').files;
+if(!f.length){alert("Choose a file!");return false}
+if(!f[0].name.endsWith('.bin')){alert("Wrong file type!");return false}
+}
+function validateUpload(){
+if(!document.getElementById('upload_data').files.length){alert("Choose a file!");return false}
+}
+function confirmFormat(){return confirm("Delete all SPIFFS data and restart?")}
+</script></head><body><center>
+<h2>ESP32 Manager</h2>
+<a href="https://github.com/mage0r/Esp32-Web-Update-and-SPIFFS-manager">GitHub</a>
+<fieldset><legend>System</legend>
+<table><tr><th>SPIFFS</th><th>ESP32 Status</th></tr><tr>
+<td>Total: %SPIFFS_TOTAL_BYTES%<br>Used: %SPIFFS_USED_BYTES%<br>Free: %SPIFFS_FREE_BYTES%</td>
+<td>Project: %PROJECT% - %VERSION%<br>Build: %BUILDDATE% %BUILDTIME%<br>
+RAM: %GETFREEHEAP% / %GETTOTALHEAP%<br>PSRAM: %GETFREEPSRAM% / %GETTOTALPSRAM%</td>
+</tr></table></fieldset>
+<fieldset><legend>Files</legend>
+<table><tr><th></th><th></th><th></th><th></th><th class="center">
+<input type="button" onclick="location.href='/edit?edit_path=new'" value="New File" class="btn"></th></tr>
+%LISTEN_FILES%</table></fieldset>
+<fieldset><legend>Upload</legend>
+<form method="POST" action="/upload" enctype="multipart/form-data">
+<input type="file" id="upload_data" name="upload_data">
+<input type="submit" value="Upload" onclick="return validateUpload()" class="btn">
+</form></fieldset>
+<fieldset><legend>Format SPIFFS</legend>
+<form method="POST" action="/format">
+<span class="warn">Deletes all data!</span>
+<input type="submit" value="Format" onclick="return confirmFormat()" class="btn">
+</form></fieldset>
+<fieldset><legend>Firmware Update</legend>
+<form method="POST" action="/update" enctype="multipart/form-data">
+<input type="file" id="update" name="update">
+<input type="submit" value="Update" onclick="return validateUpdate()" class="btn">
+</form></fieldset>
+</center></body></html>)rawliteral";
 
 const char edit_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML>
-<html>
-  <head>
-    <title>Edit file</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-      body {
-        background-color: #f7f7f7;
-      }
-      #submit {
-        width:120px;
-      }
-      #spacer_50 {
-        height: 50px;
-      }
-      #spacer_20 {
-        height: 20px;
-      }
-      fieldset {
-        width:800px;
-        background-color: #f7f7f7;
-      }
-      table {
-        background-color: #dddddd;
-      }
-      td, th {
-        text-align: center;
-        padding: 15px;
-      }
-      textarea {
-        width: 700px;
-        height: 200px;
-        padding: 12px 20px;
-        box-sizing: border-box;
-        border: 2px solid #ccc;
-        border-radius: 4px;
-        resize: none;
-      }
-    </style>
-    <script>
-      function validateForm()
-      {
-        var allowedExtensions = "%ALLOWED_EXTENSIONS_EDIT%";
-        var inputMessage = document.getElementById('save_path').value;
-        var dotIndex = inputMessage.lastIndexOf(".")+1;
-        var inputMessageExtension = inputMessage.substring(dotIndex);
-        var extIndex = allowedExtensions.indexOf(inputMessageExtension);
-        var isSlash = inputMessage.substring(0,1);
-
-        if(inputMessage == "")
-        {
-          alert("Enter the file name! \ne.g.: new.txt");
-          return false;
-        }
-        if(dotIndex == 0)
-        {
-          alert("The extension is missing at the end of the file!");
-          return false;
-        }
-        if(inputMessageExtension == "")
-        {
-          alert("The extension is missing at the end of the file!");
-          return false;
-        }
-        if(extIndex == -1)
-        {
-          alert("Extension not supported!");
-          return false;
-        }
-      }
-    </script>
-  </head>
-  <body>
-    <center>
-      <h2>Edit file</h2>
-      <div id="spacer_20"></div>
-      
-      <fieldset>
-        <legend>Edit text file</legend>
-        <div id="spacer_20"></div>
-        <table><tr><td colspan="2">
-        <form name="edit_file" action="/save" onsubmit="return validateForm()">
-          <textarea name="edit_textarea">%TEXTAREA_CONTENT%</textarea>
-          <div id="spacer_20"></div>
-        </td></tr><tr><td>
-          %SAVE_PATH_INPUT%
-          <button type "submit" id="submit" >Save</button>
-        </form>
-        </td><td>
-        <button id="submit" onclick="window.location.href='/manager';">Cancel</button>
-        </td></tr></table>
-        <div id="spacer_50"></div>
-      </fieldset>
-      
-      <iframe style="display:none" name="self_page"></iframe>
-    </center>
-  </body>
-</html> )rawliteral";
+<!DOCTYPE HTML><html><head><title>Edit File</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{background:#f7f7f7;font-family:Arial,sans-serif}
+fieldset{width:800px;background:#f7f7f7}
+textarea{width:700px;height:200px;padding:12px;border:2px solid #ccc;border-radius:4px;resize:vertical}
+.btn{width:120px;padding:8px;margin:5px}
+</style>
+<script>
+function validateForm(){
+var ext='%ALLOWED_EXTENSIONS_EDIT%';
+var path=document.getElementById('save_path').value;
+var dotIndex=path.lastIndexOf('.')+1;
+if(!path){alert('Enter filename!');return false}
+if(!dotIndex){alert('Missing extension!');return false}
+if(ext.indexOf(path.substring(dotIndex))==-1){alert('Extension not supported!');return false}
+}
+</script></head><body><center>
+<h2>Edit File</h2>
+<fieldset><legend>Edit Text File</legend>
+<form name="edit_file" action="/save" onsubmit="return validateForm()">
+<textarea name="edit_textarea">%TEXTAREA_CONTENT%</textarea><br>
+%SAVE_PATH_INPUT%
+<input type="submit" value="Save" class="btn">
+</form>
+<button onclick="location.href='/manage'" class="btn">Cancel</button>
+</fieldset></center></body></html>)rawliteral";
 
 const char ok_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML>
-<html>
-  <head>
-    <title>Update successful</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-      body {
-        background-color: #f7f7f7;
-      }
-      #spacer_50 {
-        height: 50px;
-      }
-    </style>
-  </head>
-  <body>
-    <center>
-      <h2>The update was successful.</h2>
-      <div id="spacer_50"></div>
-      <button onclick="window.location.href='/manager';">to homepage</button>
-    </center>
-  </body>
-</html> )rawliteral";
+<!DOCTYPE HTML><html><head><title>Success</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{background:#f7f7f7;text-align:center;font-family:Arial,sans-serif}</style>
+</head><body><h2>Update successful!</h2>
+<button onclick="location.href='/manage'">Return</button></body></html>)rawliteral";
+
+const char failed_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML><html><head><title>Failed</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{background:#f7f7f7;text-align:center;font-family:Arial,sans-serif}</style>
+</head><body><h2>Update failed!</h2>
+<button onclick="location.href='/manage'">Return</button></body></html>)rawliteral";
 
 const char index_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML>
-<html>
-  <head>
-    <title>ESP32 SPIFFS Manager</title>
-    <style>
-      body {
-        background-color: #f7f7f7;
-      }
-      table {
-        background-color: #dddddd;
-        border-collapse: collapse;
-        width:650px;
-      }
-      td, th {
-        border: 1px solid #dddddd;
-        text-align: left;
-        padding: 8px;
-      }
-      #first_td_th {
-        width:280px;
-      }
-      #center_td {
-        text-align: center;
-      }
-      tr:nth-child(even) {
-        background-color: #ffffff;
-      }
-      fieldset {
-        width:700px;
-        background-color: #f7f7f7;
-      }
-    </style>
-  </head>
-  <body>
-  <h2>ESP32 Default Index Page!</h2>
-  Replace me with whatever makes sense for your project!<br />
-  This file is auto-generated if your SPIFFS has no config file.<br />
-  <a href="https://github.com/mage0r/Esp32-Web-Update-and-SPIFFS-manager">https://github.com/mage0r/Esp32-Web-Update-and-SPIFFS-manager</a><br />
-  <fieldset>
-        <legend>System</legend>
-          <div id="spacer_20"></div>
-          <table>
-            <tr>
-              <th>SPIFFS Use</th>
-              <th>ESP32 Status</th>
-            </tr>
-            <tr>
-              <td>
-                Total: %SPIFFS_TOTAL_BYTES%<br />
-                Used: %SPIFFS_USED_BYTES%<br />
-                Free: %SPIFFS_FREE_BYTES%
-              </td>
-              <td>
-                Project: %PROJECT% - %VERSION%<br />
-                Build Date: %BUILDDATE% %BUILDTIME%<br />
-                Free RAM: %GETFREEHEAP% / %GETTOTALHEAP%<br />
-                Free PSRAM: %GETFREEPSRAM% / %GETTOTALPSRAM%<br />
-              </td>
-            </tr>
-          </table>
-          
-        <div id="spacer_20"></div>
-      </fieldset>
-  </body>
-</html>    
- )rawliteral"; 
+<!DOCTYPE HTML><html><head><title>ESP32 SPIFFS Manager</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{background:#f7f7f7;font-family:Arial,sans-serif;padding:20px}
+table{background:#ddd;border-collapse:collapse;width:650px}
+td,th{border:1px solid #ddd;text-align:left;padding:8px}
+tr:nth-child(even){background:#fff}
+fieldset{width:700px;background:#f7f7f7;margin:10px 0}
+</style></head><body>
+<h2>ESP32 Default Index Page</h2>
+<p>Replace with your project content!<br>Auto-generated when no config exists.</p>
+<a href="https://github.com/mage0r/Esp32-Web-Update-and-SPIFFS-manager">GitHub Project</a>
+<fieldset><legend>System Status</legend>
+<table><tr><th>SPIFFS</th><th>ESP32 Status</th></tr><tr>
+<td>Total: %SPIFFS_TOTAL_BYTES%<br>Used: %SPIFFS_USED_BYTES%<br>Free: %SPIFFS_FREE_BYTES%</td>
+<td>Project: %PROJECT% - %VERSION%<br>Build: %BUILDDATE% %BUILDTIME%<br>
+RAM: %GETFREEHEAP% / %GETTOTALHEAP%<br>PSRAM: %GETFREEPSRAM% / %GETTOTALPSRAM%</td>
+</tr></table></fieldset>
+</body></html>)rawliteral";

@@ -53,17 +53,22 @@ String edit_processor(const String& var) {
 }
 
 void setupAsyncServer() {
-  server.on("/manager", HTTP_GET, [](AsyncWebServerRequest *request) {
+  server.on("/manage", HTTP_GET, [](AsyncWebServerRequest *request) {
     if(!request->authenticate(http_username.c_str(), http_password.c_str())) {
       return request->requestAuthentication();
     }
-    request->send_P(200, "text/html", manager_html, processor);
+    //request->send_P(200, "text/html", manager_html, processor);
+    request->send(SPIFFS, "/manage.html", String(), false, processor);
   });
 
  
   server.on("/update", HTTP_POST, [](AsyncWebServerRequest *request) {
     rebooting = !Update.hasError();
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/html", rebooting ? ok_html : failed_html);
+    AsyncWebServerResponse *response = request->beginResponse(
+      SPIFFS,
+      rebooting ? "/ok.html" : "/failed.html",
+      "text/html"
+    );
 
     response->addHeader("Connection", "close");
     request->send(response);
@@ -113,7 +118,8 @@ void setupAsyncServer() {
       savePath = inputMessage;
       textareaContent = readFile(SPIFFS, inputMessage.c_str());
     }
-    request->send_P(200, "text/html", edit_html, edit_processor);
+    //request->send_P(200, "text/html", edit_html, edit_processor);
+    request->send(SPIFFS, "/edit.html", String(), false, edit_processor);
   });
 
 
@@ -130,7 +136,7 @@ void setupAsyncServer() {
     }
     writeFile(SPIFFS, savePath.c_str(), inputMessage.c_str());
 
-    request->redirect("/manager");
+    request->redirect("/manage");
   });
 
 
@@ -143,7 +149,7 @@ void setupAsyncServer() {
     if(inputMessage !="choose") {
       SPIFFS.remove(inputMessage.c_str());
     }
-    request->redirect("/manager");
+    request->redirect("/manage");
   });
 
   server.on("/download", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -155,7 +161,7 @@ void setupAsyncServer() {
     
     request->send(SPIFFS, inputMessage, "application/octet-stream", true);
 
-    request->redirect("/manager");
+    request->redirect("/manage");
   });
 
 
@@ -254,6 +260,11 @@ void writeFile(fs::FS &fs, String path, const char * message)
   }
   file.print(message);
   file.close();
+
+  if(path == "config.ini") {
+    // if we just edited the config.ini file, reload it.
+    load_config(SPIFFS, "/config.ini");
+  }
 }
 
 void uploadFile(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) 
@@ -266,7 +277,7 @@ void uploadFile(AsyncWebServerRequest *request, String filename, size_t index, u
   }
   if(final) {
     request->_tempFile.close();
-    request->redirect("/manager");
+    request->redirect("/manage");
   }
 }
 

@@ -62,7 +62,7 @@ void setup_wifi()
     Serial.println(WiFi.localIP());
 
     MDNS.begin(host);
-    Serial.printf("Host: http://%s.local/manager\n", host.c_str());
+    Serial.printf("Host: http://%s.local/manage\n", host.c_str());
 
     setupAsyncServer();
 
@@ -75,7 +75,7 @@ void setup_AP() {
 
   // You can remove the password parameter if you want the AP to be open.
   // a valid password must have more than 7 characters
-  if (!WiFi.softAP("Web-Server")) {
+  if (!WiFi.softAP(PROJECT)) {
     Serial.println(F("Soft AP creation failed."));
     while(1);
   }
